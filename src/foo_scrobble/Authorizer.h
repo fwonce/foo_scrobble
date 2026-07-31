@@ -1,6 +1,9 @@
 #pragma once
-#include "fb2ksdk.h"
-#include <cpprest/asyncrt_utils.h>
+#include "WebService.h"
+
+#include <SDK/foobar2000.h>
+#include <functional>
+#include <string>
 
 namespace foo_scrobble
 {
@@ -17,22 +20,22 @@ public:
         Authorized,
     };
 
+    using StateChangeHandler = std::function<void(State)>;
+
     explicit Authorizer(pfc::string_base const& sessionKey);
 
-    State GetState() const;
+    State GetState() const { return state_; }
     pfc::string8_fast GetSessionKey() const { return sessionKey_; }
 
     void ClearAuth();
-    void CancelAuth();
-    pplx::task<bool> RequestAuthAsync();
-    pplx::task<bool> CompleteAuthAsync();
+    void RequestAuth(StateChangeHandler onComplete);
+    void CompleteAuth(StateChangeHandler onComplete);
 
 private:
     State state_ = State::Unauthorized;
-    pplx::cancellation_token_source cts_;
-
     pfc::string8_fast sessionKey_;
     std::string authToken_;
+    WebService webService_;
 };
 
 } // namespace foo_scrobble

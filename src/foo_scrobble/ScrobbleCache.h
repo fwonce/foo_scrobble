@@ -1,41 +1,40 @@
 #pragma once
 #include "Track.h"
-#include "fb2ksdk.h"
 
-#include <algorithm>
+#include <SDK/foobar2000.h>
+
+#include <mutex>
 #include <vector>
 
 namespace foo_scrobble
 {
 
-class ScrobbleCache : public cfg_var
+class ScrobbleCache
 {
 public:
-    static ScrobbleCache& Get() { return instance_; }
-
-    bool IsEmpty() const { return tracks_.empty(); }
-    size_t Count() const { return tracks_.size(); }
-    Track const& operator[](size_t index) const { return tracks_[index]; }
-
-    void Add(Track track) { tracks_.push_back(std::move(track)); }
-
-    void Evict(size_t count)
+    static ScrobbleCache& Get()
     {
-        count = std::min(count, tracks_.size());
-        tracks_.erase(tracks_.begin(), tracks_.begin() + count);
+        static ScrobbleCache instance;
+        return instance;
     }
 
+    bool IsEmpty();
+    size_t Count();
+    Track operator[](size_t index);
+
+    void Add(Track track);
+    void Evict(size_t count);
+    void EnsureLoaded();
+
 private:
-    ScrobbleCache(GUID const& guid)
-        : cfg_var(guid)
-    {}
+    ScrobbleCache() = default;
+    void Load();
+    void Save();
+    std::string GetFilePath() const;
 
-    void get_data_raw(stream_writer* stream, abort_callback& abort) override;
-    void set_data_raw(stream_reader* stream, t_size sizehint,
-                      abort_callback& abort) override;
-
+    mutable std::mutex mutex_;
     std::vector<Track> tracks_;
-    static ScrobbleCache instance_;
+    bool loaded_ = false;
 };
 
 } // namespace foo_scrobble

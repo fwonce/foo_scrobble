@@ -1,0 +1,13 @@
+// Local API key overrides - DO NOT COMMIT this file
+//
+// Copy this file to Keys.local.h and fill in your Last.fm API key and secret.
+// Get yours at: https://www.last.fm/api/account/create
+//
+// Keys.local.h is listed in .gitignore so it won't be committed.
+
+#pragma once
+
+namespace lastfm {
+char const* const ApiKey = "YOUR_API_KEY_HERE";
+char const* const Secret = "YOUR_SHARED_SECRET_HERE";
+}

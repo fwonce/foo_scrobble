@@ -1,7 +1,7 @@
 #pragma once
 #include "UnixClock.h"
 
-#include "fb2ksdk.h"
+#include <SDK/foobar2000.h>
 #include <chrono>
 
 namespace foo_scrobble

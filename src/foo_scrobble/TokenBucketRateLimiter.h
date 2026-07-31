@@ -22,8 +22,7 @@ public:
 
     Duration Acquire(Clock::time_point now, size_t n = 1)
     {
-        if (n == 0)
-            return Duration::zero();
+        if (n == 0) return Duration::zero();
 
         Advance(now);
         if (n > tokens_)
@@ -49,7 +48,6 @@ private:
     void Advance(Clock::time_point const now)
     {
         auto const elapsed = now - lastStep_;
-
         if (elapsed > Duration::zero()) {
             tokens_ = std::min(tokens_ + TokensFromDuration(elapsed), burstCapacity_);
             lastStep_ = now;

@@ -1,27 +1,38 @@
-/build/
-/test/
-
+# Build output
+build/
 obj/
 Debug/
 Release/
-packages/
+*.o
+*.a
+*.dylib
 
+# SDK (third-party, see setup.sh)
+sdk/
 
-# User-specific files
+# Old SDK backups
+sdk_backup_*/
+
+# Xcode user data
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Local API keys (see Keys.cpp)
+src/foo_scrobble/Keys.local.h
+
+# macOS
+.DS_Store
+
+# Agent configuration (local to contributor)
+.claude/
+AGENTS.md
+CLAUDE.md
+
+# Visual Studio cache/options
+.vs/
 *.suo
 *.user
-*.userosscache
-*.sln.docstates
-
-# Visual Studio cache/options directory
-.vs/
-
-# Visual C++ cache files
-ipch/
-*.aps
 *.ncb
-*.opensdf
 *.sdf
-*.cachefile
 *.VC.db
-*.VC.opendb

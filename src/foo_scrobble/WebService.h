@@ -1,68 +1,38 @@
 #pragma once
-#include "Outcome.h"
-#include "OutcomeCompat.h"
-#include "fb2ksdk.h"
+#include "Track.h"
 
+#include <SDK/foobar2000.h>
+
+#include <functional>
 #include <map>
+#include <string>
+#include <string_view>
 #include <system_error>
-
-#include <cpprest/http_client.h>
 
 namespace lastfm
 {
 
-wchar_t const* const AuthUrl = L"http://www.last.fm/api/auth";
 extern char const* const ApiKey;
 extern char const* const Secret;
 
 enum class Status
 {
     Success = 0,
-
-    //! The service does not exist.
     InvalidService = 2,
-
-    //! No method with that name in this package.
     InvalidMethod = 3,
-
-    //! No permissions to access the service.
     AuthenticationFailed = 4,
-
-    //! The service does not exist in that format.
     InvalidFormat = 5,
-
-    //! Request is missing a required parameter.
     InvalidParameters = 6,
-
-    //! Invalid resource specified.
     InvalidResourceSpecified = 7,
-
-    //! Something else went wrong.
     OperationFailed = 8,
-
-    //! Please re-authenticate.
     InvalidSessionKey = 9,
-
-    //! You must be granted a valid key by last.fm.
     InvalidAPIKey = 10,
-
-    //! The service is temporarily offline. Try again later.
     ServiceOffline = 11,
-
-    //! Invalid method signature supplied.
     InvalidMethodSignature = 13,
-
     TokenNotAuthorized = 14,
-
-    //! There was a temporary error processing your request. Try again later.
     ServiceTemporarilyUnavailable = 16,
-
-    //! Access for the API account has been suspended.
     SuspendedAPIKey = 26,
-
-    //! Your IP has made too many requests in a short period.
     RateLimitExceeded = 29,
-
     InvalidResponse = -1,
     InternalError = -2,
     ConnectionError = -3,
@@ -90,51 +60,7 @@ class ErrorCategory : public std::error_category
 public:
     char const* name() const noexcept override { return "last.fm api"; }
 
-    std::string message(int ev) const override
-    {
-        switch (static_cast<Status>(ev)) {
-        case Status::Success:
-            return "Success";
-        case Status::InvalidService:
-            return "The service does not exist.";
-        case Status::InvalidMethod:
-            return "No method with that name in this package.";
-        case Status::AuthenticationFailed:
-            return "No permissions to access the service.";
-        case Status::InvalidFormat:
-            return "The service does not exist in that format.";
-        case Status::InvalidParameters:
-            return "Request is missing a required parameter.";
-        case Status::InvalidResourceSpecified:
-            return "Invalid resource specified.";
-        case Status::OperationFailed:
-            return "Something else went wrong.";
-        case Status::InvalidSessionKey:
-            return "Please re-authenticate.";
-        case Status::InvalidAPIKey:
-            return "You must be granted a valid key by last.fm.";
-        case Status::ServiceOffline:
-            return "The service is temporarily offline. Try again later.";
-        case Status::InvalidMethodSignature:
-            return "Invalid method signature supplied.";
-        case Status::ServiceTemporarilyUnavailable:
-            return "There was a temporary error processing your request. Try again later.";
-        case Status::SuspendedAPIKey:
-            return "Access for the API account has been suspended.";
-        case Status::RateLimitExceeded:
-            return "Your IP has made too many requests in a short period.";
-        case Status::TokenNotAuthorized:
-            return "Token has not been authorized.";
-        case Status::InvalidResponse:
-            return "Invalid response.";
-        case Status::InternalError:
-            return "Internal error.";
-        case Status::ConnectionError:
-            return "Connection error.";
-        default:
-            return "Unknown error";
-        }
-    }
+    std::string message(int ev) const override;
 };
 
 inline std::error_category const& webservice_category()
@@ -153,31 +79,81 @@ inline std::error_code make_error_code(Status st)
 namespace foo_scrobble
 {
 
-using OUTCOME_V2_NAMESPACE::outcome;
+template<typename T>
+class WebResult
+{
+public:
+    static WebResult Success(T value = T{}) { return WebResult(std::move(value)); }
+    static WebResult Error(lastfm::Status status) { return WebResult(status); }
+    static WebResult Exception(std::exception_ptr ex) { return WebResult(std::move(ex)); }
+
+    bool has_value() const { return !error_ && !exception_; }
+    bool has_error() const { return error_.has_value(); }
+    bool has_exception() const { return exception_ != nullptr; }
+
+    T& value() { return value_; }
+    T const& value() const { return value_; }
+    std::error_code error() const { return *error_; }
+    std::exception_ptr exception() const { return exception_; }
+
+    operator bool() const { return has_value(); }
+
+private:
+    WebResult(T value) : value_(std::move(value)) {}
+    WebResult(lastfm::Status status) : error_(lastfm::make_error_code(status)) {}
+    WebResult(std::exception_ptr ex) : exception_(std::move(ex)) {}
+
+    T value_{};
+    std::optional<std::error_code> error_;
+    std::exception_ptr exception_;
+};
+
+//! Specialization for void results (scrobble/nowplaying)
+class WebVoidResult
+{
+public:
+    static WebVoidResult Success() { return WebVoidResult(); }
+    static WebVoidResult Error(lastfm::Status status) { return WebVoidResult(status); }
+    static WebVoidResult Exception(std::exception_ptr ex) { return WebVoidResult(std::move(ex)); }
+
+    bool has_value() const { return !error_ && !exception_; }
+    bool has_error() const { return error_.has_value(); }
+    bool has_exception() const { return exception_ != nullptr; }
+
+    std::error_code error() const { return *error_; }
+    std::exception_ptr exception() const { return exception_; }
+
+    operator bool() const { return has_value(); }
+
+private:
+    WebVoidResult() = default;
+    WebVoidResult(lastfm::Status status) : error_(lastfm::make_error_code(status)) {}
+    WebVoidResult(std::exception_ptr ex) : exception_(std::move(ex)) {}
+
+    std::optional<std::error_code> error_;
+    std::exception_ptr exception_;
+};
 
 class Track;
 
 class WebService
 {
 public:
+    using CompletionHandler = std::function<void(WebResult<std::string>)>;
+    using VoidCompletionHandler = std::function<void(WebVoidResult)>;
+
     explicit WebService(char const* apiKey, char const* secret);
+    ~WebService();
 
     void SetSessionKey(std::string_view newSessionKey)
     {
-        sessionKey_ = std::move(newSessionKey);
+        sessionKey_ = std::string(newSessionKey);
     }
 
-    pplx::task<outcome<std::string>> GetAuthToken(
-        pplx::cancellation_token cancellationToken);
-
-    pplx::task<outcome<std::string>> GetSessionKey(
-        std::string_view authToken, pplx::cancellation_token cancellationToken);
-
-    pplx::task<outcome<void>> SendNowPlaying(Track const& track,
-                                             pplx::cancellation_token cancellationToken);
-
-    pplx::task<outcome<void>> Scrobble(Track const& track,
-                                       pplx::cancellation_token cancellationToken);
+    void GetAuthToken(CompletionHandler completion);
+    void GetSessionKey(std::string_view authToken, CompletionHandler completion);
+    void SendNowPlaying(Track const& track, VoidCompletionHandler completion);
+    void Scrobble(Track const& track, VoidCompletionHandler completion);
 
     class MapIndex
     {
@@ -244,46 +220,18 @@ public:
     };
 
     ScrobbleRequest CreateScrobbleRequest();
-
-    pplx::task<outcome<void>> Scrobble(ScrobbleRequest request,
-                                       pplx::cancellation_token cancellationToken);
+    void Scrobble(ScrobbleRequest request, VoidCompletionHandler completion);
 
 private:
     ParamsMap NewParams(std::string_view method) const;
     ParamsMap NewAuthedParams(std::string_view method) const;
-
     void SignRequestParams(ParamsMap& params);
+    void PostRequest(ParamsMap const& params, CompletionHandler completion);
 
-    pplx::task<web::http::http_response> Post(ParamsMap const& params,
-                                              pplx::cancellation_token cancellationToken)
-    {
-        return Request(web::http::methods::POST, params, cancellationToken);
-    }
-
-    pplx::task<web::http::http_response> Request(
-        web::http::method method, ParamsMap const& params,
-        pplx::cancellation_token cancellationToken);
-
-    web::http::client::http_client client_;
-    std::string_view const apiKey_;
-    std::string_view const secret_;
+    void* session_; // NSURLSession*
+    std::string const apiKey_;
+    std::string const secret_;
     std::string sessionKey_;
 };
-
-using ::operator<<;
-
-pfc::string_base& operator<<(pfc::string_base& os, lastfm::Status status);
-pfc::string_base& operator<<(pfc::string_base& os, std::exception_ptr const& ptr);
-pfc::string_base& operator<<(pfc::string_base& os, std::error_code const& ec);
-
-template<typename R, typename S, typename E, typename P>
-pfc::string_base& operator<<(pfc::string_base& os, outcome<R, S, E, P> const& result)
-{
-    if (result.has_exception())
-        os << result.exception();
-    else if (result.has_error())
-        os << result.error();
-    return os;
-}
 
 } // namespace foo_scrobble
